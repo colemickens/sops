@@ -121,15 +121,7 @@ func newAuthorizer() (autorest.Authorizer, error) {
 		return config.Authorizer()
 	}
 
-	// 4. MSI
-	if settings.authMethod == "msi" {
-		config := auth.NewMSIConfig()
-		config.Resource = settings.resource
-		config.ClientID = settings.clientID
-		return config.Authorizer()
-	}
-
-	// 5. Device Code
+	// 4. Device Code
 	if settings.authMethod == "devicecode" {
 		// TODO: Removed until we decide how to handle prompt on stdout, etc.
 		//// TODO: This will be required on every execution. Consider caching.
@@ -138,7 +130,24 @@ func newAuthorizer() (autorest.Authorizer, error) {
 		return nil, errors.New("device code flow not implemented")
 	}
 
+	// "Auto"
+	// At this point, we weren't explicit about anything supported.
+	// Let's log that as a warning and then go ahead and try MSI, then CLI
+	log.Warn("No supported AZURE_AUTH_MODE was specified. Trying MSI.")
+	config := auth.NewMSIConfig()
+	config.Resource = settings.resource
+	config.ClientID = settings.clientID
+	authorizer, err := config.Authorizer()
+	if settings.authMethod == "msi" {
+		// the user explicitly opted for MSI, so return it or the error immediately
+		return authorizer, err
+	}
+	if err == nil {
+		return authorizer, nil
+	}
+
 	// 6. CLI
+	log.Warn("No supported AZURE_AUTH_MODE was specified and MSI failed. Trying CLI.")
 	return auth.NewAuthorizerFromCLIWithResource(settings.resource)
 }
 
